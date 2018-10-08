@@ -161,7 +161,7 @@ func (gcode *GCodeWriter) ExtrudePolyline(pp Polyline) string {
 }
 
 func distance_to(from core.Point, to core.Point) (float64) {
-    dX := to.X - from.Y
+    dX := to.X - from.X
     dY := to.Y - from.Y
     dZ := to.Z - from.Z
     return math.Sqrt(math.Pow(dX, 2) + math.Pow(dY, 2) + math.Pow(dZ, 2))
