@@ -1,6 +1,7 @@
 package main
 
 import (
+    "bufio"
     "github.com/rpaloschi/dxf-go/core"
     "github.com/rpaloschi/dxf-go/document"
     "github.com/rpaloschi/dxf-go/entities"
@@ -9,6 +10,7 @@ import (
     "log"
     "math"
     "os"
+    "strings"
 )
 
 type Polyline []core.Point
@@ -35,13 +37,7 @@ func main() {
 		log.Fatal(err)
 	}
     
-    // prepend speed, if any
-    if *Fptr > 0 {
-        fmt.Printf("G1 F%f\n", *Fptr)
-    }
-    
     // collect polylines and check print bounds
-    gcode := GCodeWriter{ E_per_mm: *Eptr }
     var polylines []Polyline
     min := core.Point{math.MaxFloat64, math.MaxFloat64, math.MaxFloat64}
     max := core.Point{math.SmallestNonzeroFloat64, math.SmallestNonzeroFloat64, math.SmallestNonzeroFloat64}
@@ -62,17 +58,32 @@ func main() {
         0,
     }
     
+    // open output file
+    outFile := flag.Arg(0) + ".gcode"
+    f, err := os.Create(outFile)
+    defer f.Close()
+    w := bufio.NewWriter(f)
+    
+    // prepend speed, if any
+    if *Fptr > 0 {
+        fmt.Fprintf(w, "G1 F%f\n", *Fptr)
+    }
+    
     // generate G-code
+    gcode := GCodeWriter{ E_per_mm: *Eptr }
     for _, p := range polylines {
         p.Translate(shift)
-        gcode.ExtrudePolyline(p)
+        f.WriteString(gcode.ExtrudePolyline(p))
     }
     
     // print some info
+    fmt.Printf("G-code written to %s\n", outFile)
     fmt.Println("PRINT INFO:")
     fmt.Printf("X min: %f; X max: %f\n", min.X, max.X)
     fmt.Printf("Y min: %f; Y max: %f\n", min.Y, max.Y)
     fmt.Printf("Z min: %f; Z max: %f\n", min.Z, max.Z)
+    
+    w.Flush()
 }
 
 func NewPolyline(vv entities.VertexSlice) (Polyline) {
@@ -108,20 +119,20 @@ type GCodeWriter struct {
     E float64
 }
 
-func (gcode *GCodeWriter) TravelTo(to core.Point) {
+func (gcode *GCodeWriter) TravelTo(to core.Point) string {
     gcode.cur = to
-    fmt.Printf("G1 X%f Y%f Z%f\n", gcode.cur.X, gcode.cur.Y, gcode.cur.Z)
+    return fmt.Sprintf("G1 X%f Y%f Z%f\n", gcode.cur.X, gcode.cur.Y, gcode.cur.Z)
 }
 
-func (gcode *GCodeWriter) ExtrudeTo(to core.Point) {
+func (gcode *GCodeWriter) ExtrudeTo(to core.Point) string {
     gcode.E += distance_to(gcode.cur, to) * gcode.E_per_mm
     gcode.cur = to
-    fmt.Printf("G1 X%f Y%f Z%f E%f\n", gcode.cur.X, gcode.cur.Y, gcode.cur.Z, gcode.E)
+    return fmt.Sprintf("G1 X%f Y%f Z%f E%f\n", gcode.cur.X, gcode.cur.Y, gcode.cur.Z, gcode.E)
 }
 
-func (gcode *GCodeWriter) ExtrudePolyline(pp Polyline) {
+func (gcode *GCodeWriter) ExtrudePolyline(pp Polyline) string {
     if len(pp) == 0 {
-        return
+        return ""
     }
     
     // if last vertex is lower than the first one, reverse vertices
@@ -132,13 +143,15 @@ func (gcode *GCodeWriter) ExtrudePolyline(pp Polyline) {
         }
     }
     
+    var out strings.Builder
     for i, p := range pp {
         if (i == 0) {
-            gcode.TravelTo(p)
+            out.WriteString(gcode.TravelTo(p))
         } else {
-            gcode.ExtrudeTo(p)
+            out.WriteString(gcode.ExtrudeTo(p))
         }
     }
+    return out.String()
 }
 
 func distance_to(from core.Point, to core.Point) (float64) {
