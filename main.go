@@ -64,6 +64,12 @@ func main() {
     defer f.Close()
     w := bufio.NewWriter(f)
     
+    // prepend a few standard commands
+    w.WriteString(`G21 ;metric values
+G90 ;absolute positioning
+M82 ;set extruder to absolute mode
+`)
+    
     // prepend speed, if any
     if *Fptr > 0 {
         fmt.Fprintf(w, "G1 F%f\n", *Fptr)
@@ -73,7 +79,7 @@ func main() {
     gcode := GCodeWriter{ E_per_mm: *Eptr }
     for _, p := range polylines {
         p.Translate(shift)
-        f.WriteString(gcode.ExtrudePolyline(p))
+        w.WriteString(gcode.ExtrudePolyline(p))
     }
     
     // print some info
